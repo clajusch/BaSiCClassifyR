@@ -3,24 +3,17 @@
 # https://stats.stackexchange.com/questions/122857/how-to-determine-overlap-of-two-empirical-distribution-based-on-quantiles
 # https://freakonometrics.hypotheses.org/4199
 
-# well annotated example data: https://storage.googleapis.com/linnarsson-lab-www-blobs/blobs/cortex/expression_mRNA_17-Aug-2014.txt
 
-setwd("C:/Users/scholzcl/Documents/FASTGenomics/deppenClassifyR")
+setwd("C:/Users/scholzcl/Documents/Git/BaSiCClassifyR")
 
-expression <- read.table("Zeisel_genesymbol.tsv",
-                         header = TRUE,
-                         stringsAsFactors = FALSE,
-                         sep = "\t")
-
-metadata <- read.table("Zeisel et al, 2015 cells_metadata.tsv",
-                       header = TRUE,
-                       stringsAsFactors = FALSE,
-                       sep = "\t")
-
-metadata$cellId <- colnames(expression)
+load("data/zeisel2015.RData")
 
 
-
+#' Summarize a gene expression vector
+#'
+#' @param exprsVec A vector of expression values.
+#' @param minDetect The minimum expression value of a detected gene. Defaults to 1.
+#' @return A vector of summary statistics.
 summarizeGene <- function(exprsVec, minDetect = 1) {
   cumulated <- sum(exprsVec)
   index <- exprsVec>=minDetect
@@ -40,6 +33,12 @@ summarizeGene <- function(exprsVec, minDetect = 1) {
 }
 
 
+#' Generate a gene expression summary profile for a cell poulation.
+#'
+#' @param exprsMat The gene expression matrix.
+#' @param minDetect The minimum expression value of a detected gene. Defaults to 1.
+#' @param cellsInColumns Indicates if cells are stored in columns of matrix. Defaults to TRUE.
+#' @return A gene expression summary profile.
 summarizeCells <- function(exprsMat, minDetect = 1, cellsInColumns = TRUE) {
   shape <- if (cellsInColumns) {
     apply(exprsMat, 1, summarizeGene, minDetect = minDetect)
@@ -50,6 +49,13 @@ summarizeCells <- function(exprsMat, minDetect = 1, cellsInColumns = TRUE) {
 }
 
 
+#' Calculate gene expression summary profiles for several cell populations.
+#'
+#' @param exprsMat The gene expression matrix.
+#' @param population A vector of population assignments. Must equal the number of cells in dataset.
+#' @param minDetect The minimum expression value of a detected gene. Defaults to 1.
+#' @param cellsInColumns Indicates if cells are stored in columns of matrix. Defaults to TRUE.
+#' @return A list of gene expression summary profiles.
 summarizePopulations <- function(exprsMat, population, minDetect = 1, cellsInColumns = TRUE) {
   groups <- unique(population)
   popSummary <- list()
@@ -65,6 +71,15 @@ summarizePopulations <- function(exprsMat, population, minDetect = 1, cellsInCol
 }
 
 
+#' Calculate the distance of a drop-out-inflated single-cell expression profile to a gene expression summary profile of a cell population.
+#'
+#' @param populationSummary
+#' @param exprsVec
+#' @param Q
+#' @param weighted
+#' @param ignoreDropouts = TRUE,
+#' @param minDetect The minimum expression value of a detected gene. Defaults to 1.
+#' @return The drop-out conditional distance.
 conditionalDistance <- function(populationSummary, exprsVec, Q=50, weighted = FALSE, ignoreDropouts = TRUE, minDetect = 1) {
   Qname <- paste("present.Q", Q, sep ="")
   rawDist <- abs(populationSummary[, Qname] - exprsVec)
@@ -94,6 +109,32 @@ classifyCells <- function(exprsMat, populationSummaries, ...) {
 }
 
 
+splitTrainAndTest <- function(exprsMat, population, trainProp = 0.8, cellsInColumns = TRUE) {
+  splitData <- list(training = list(), test = list())
+  cellIDs <- if (cellsInColumns) {
+    colnames(exprsMat)
+  } else {
+    rownames(exprsMat)
+  }
+  cellIDs <- split(cellIDs, population)
+  trainIDs <- unlist(lapply(cellIDs, function(x, p) sample(x, round(length(x)*p)), p=trainProp))
+  splitData$training <- if (cellsInColumns) {
+    exprsMat[, colnames(exprsMat) %in% trainIDs]
+  } else {
+    exprsMat[rownames(exprsMat) %in% trainIDs,]
+  }
+  splitData$test <- if (cellsInColumns) {
+    exprsMat[, !colnames(exprsMat) %in% trainIDs]
+  } else {
+    exprsMat[!rownames(exprsMat) %in% trainIDs,]
+  }
+  return(splitData)
+}
+
+
+trainClassifyR <- function(exprsMat, population, minDetect = 1, cellsInColumns = TRUE) {
+
+}
 
 
 zeiselLevel1 <- summarizePopulations(expression, population = metadata$level1class)
